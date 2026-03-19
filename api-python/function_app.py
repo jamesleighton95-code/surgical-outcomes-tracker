@@ -351,13 +351,65 @@ def custom_query(req: func.HttpRequest) -> func.HttpResponse:
         # Get all user's cases
         cases = get_cases_by_user(user_id, limit=1000)
 
-        # TODO: Implement AI-powered query answering using OpenAI
-        # For now, return a placeholder
+        # Check if OpenAI is configured
+        import os
+        openai_key = os.environ.get('OPENAI_API_KEY')
+
+        if openai_key:
+            try:
+                from openai import OpenAI
+                client = OpenAI(api_key=openai_key)
+
+                # Prepare case data summary for AI
+                case_summary = prepare_case_summary(cases)
+
+                # Call OpenAI
+                response = client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": """You are an analytical assistant helping a surgeon analyze their surgical cases.
+                            Provide clear, data-driven insights based on the case data provided.
+                            Be specific with numbers and percentages.
+                            If the data doesn't support answering the question, say so clearly."""
+                        },
+                        {
+                            "role": "user",
+                            "content": f"Case Data:\n{case_summary}\n\nQuestion: {query}"
+                        }
+                    ],
+                    temperature=0.7,
+                    max_tokens=500
+                )
+
+                answer = response.choices[0].message.content
+
+                return func.HttpResponse(
+                    json.dumps({
+                        'query': query,
+                        'answer': answer,
+                        'totalCases': len(cases),
+                        'aiPowered': True
+                    }),
+                    status_code=200,
+                    mimetype='application/json'
+                )
+
+            except Exception as ai_error:
+                logging.error(f"OpenAI error: {str(ai_error)}")
+                # Fall back to basic analysis
+                pass
+
+        # If OpenAI not available, provide basic analysis
+        answer = analyze_query_locally(query, cases)
+
         return func.HttpResponse(
             json.dumps({
                 'query': query,
-                'answer': 'AI-powered query answering coming soon',
-                'totalCases': len(cases)
+                'answer': answer,
+                'totalCases': len(cases),
+                'aiPowered': False
             }),
             status_code=200,
             mimetype='application/json'
@@ -370,6 +422,89 @@ def custom_query(req: func.HttpRequest) -> func.HttpResponse:
             status_code=500,
             mimetype='application/json'
         )
+
+
+def prepare_case_summary(cases: list) -> str:
+    """Prepare a summary of cases for AI analysis."""
+    if not cases:
+        return "No cases available."
+
+    summary = f"Total cases: {len(cases)}\n\n"
+
+    # Procedure types
+    procedure_types = {}
+    for case in cases:
+        pt = case.get('ProcedureType', 'Unknown')
+        procedure_types[pt] = procedure_types.get(pt, 0) + 1
+
+    summary += "Procedure Types:\n"
+    for pt, count in procedure_types.items():
+        summary += f"- {pt}: {count}\n"
+
+    # Outcomes
+    outcomes = {'positive': 0, 'neutral': 0, 'negative': 0, 'unknown': 0}
+    for case in cases:
+        outcome = case.get('Outcome', 'unknown')
+        if outcome in outcomes:
+            outcomes[outcome] += 1
+        else:
+            outcomes['unknown'] += 1
+
+    summary += f"\nOutcomes:\n"
+    for outcome, count in outcomes.items():
+        summary += f"- {outcome.capitalize()}: {count}\n"
+
+    # Complications
+    with_complications = sum(1 for c in cases if c.get('Complications') and c['Complications'].lower() != 'none')
+    summary += f"\nComplications: {with_complications} cases\n"
+
+    # Average duration
+    durations = [c.get('DurationMinutes') for c in cases if c.get('DurationMinutes')]
+    if durations:
+        avg_duration = sum(durations) / len(durations)
+        summary += f"Average Duration: {avg_duration:.1f} minutes\n"
+
+    # Include sample of actual cases (max 10) for context
+    summary += "\nSample Cases:\n"
+    for i, case in enumerate(cases[:10]):
+        summary += f"{i+1}. {case.get('ProcedureName', 'Unknown')} - "
+        summary += f"{case.get('ProcedureType', 'Unknown')} - "
+        summary += f"Outcome: {case.get('Outcome', 'Unknown')} - "
+        summary += f"Date: {case.get('DatePerformed', 'Unknown')}\n"
+
+    return summary
+
+
+def analyze_query_locally(query: str, cases: list) -> str:
+    """Basic local query analysis when OpenAI is not available."""
+    query_lower = query.lower()
+
+    # Count-based queries
+    if 'how many' in query_lower:
+        if 'last' in query_lower and 'month' in query_lower:
+            # Extract number of months
+            import re
+            months_match = re.search(r'(\d+)\s+month', query_lower)
+            months = int(months_match.group(1)) if months_match else 3
+
+            from datetime import datetime, timedelta
+            cutoff = datetime.now() - timedelta(days=30 * months)
+
+            recent = [c for c in cases if datetime.fromisoformat(c.get('DatePerformed', '2000-01-01').replace('Z', '+00:00')) >= cutoff]
+            return f"You performed {len(recent)} cases in the last {months} months."
+
+        if 'negative' in query_lower and 'margin' in query_lower:
+            # This would require custom metrics - for now, general response
+            return f"Based on {len(cases)} total cases. To track margin status specifically, add it as a custom metric when logging cases."
+
+    # Rate-based queries
+    if 'complication rate' in query_lower:
+        with_comp = sum(1 for c in cases if c.get('Complications') and c['Complications'].lower() != 'none')
+        rate = (with_comp / len(cases) * 100) if cases else 0
+        return f"Your overall complication rate is {rate:.1f}% ({with_comp} out of {len(cases)} cases)."
+
+    # Default response
+    return f"I analyzed your {len(cases)} cases. For more advanced insights, configure the OpenAI API key in your environment variables."
 
 
 # ============================================================================

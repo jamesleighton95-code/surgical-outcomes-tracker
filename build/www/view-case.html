@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Case - Surgical Outcomes Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <h1>Surgical Outcomes Tracker</h1>
+            <div class="nav-links">
+                <a href="dashboard.html">Dashboard</a>
+                <a href="cases.html">Cases</a>
+                <a href="analytics.html">Analytics</a>
+                <a href="query.html">Custom Query</a>
+                <span id="userGreeting"></span>
+                <a href="#" onclick="appConfig.logout()">Logout</a>
+            </div>
+        </nav>
+
+        <main>
+            <div class="page-header">
+                <h2>Case Details</h2>
+                <div>
+                    <button onclick="editCase()" class="btn btn-primary">Edit</button>
+                    <button onclick="deleteCase()" class="btn btn-secondary">Delete</button>
+                </div>
+            </div>
+
+            <div id="loading" class="loading">Loading case...</div>
+            <div id="error" class="error"></div>
+
+            <div id="caseDetails" style="display: none;">
+                <div class="form-section">
+                    <h3>Procedure Information</h3>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <strong>Procedure Type:</strong>
+                            <span id="procedureType"></span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Procedure Name:</strong>
+                            <span id="procedureName"></span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Date Performed:</strong>
+                            <span id="datePerformed"></span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Duration:</strong>
+                            <span id="durationMinutes"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Patient Demographics</h3>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <strong>Age:</strong>
+                            <span id="patientAge"></span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Sex:</strong>
+                            <span id="patientSex"></span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>ASA Grade:</strong>
+                            <span id="asaGrade"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Outcomes</h3>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <strong>Overall Outcome:</strong>
+                            <span id="outcome"></span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Complications:</strong>
+                            <span id="complications"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Clinical Notes</h3>
+                    <p id="notes" style="white-space: pre-wrap;"></p>
+                </div>
+
+                <div class="form-section">
+                    <h3>Metadata</h3>
+                    <div class="detail-grid">
+                        <div class="detail-item">
+                            <strong>Created:</strong>
+                            <span id="createdAt"></span>
+                        </div>
+                        <div class="detail-item">
+                            <strong>Last Updated:</strong>
+                            <span id="updatedAt"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        if (!appConfig.isAuthenticated()) {
+            window.location.href = '/login.html';
+        }
+
+        const user = appConfig.getCurrentUser();
+        if (user) {
+            document.getElementById('userGreeting').textContent = `Hello, ${user.name}`;
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const caseId = urlParams.get('id');
+
+        if (!caseId) {
+            window.location.href = '/cases.html';
+        }
+
+        async function loadCase() {
+            try {
+                const response = await appConfig.apiCall(`cases/${caseId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayCase(data.case);
+                    document.getElementById('caseDetails').style.display = 'block';
+                } else {
+                    document.getElementById('error').textContent = data.error || 'Failed to load case';
+                }
+            } catch (error) {
+                document.getElementById('error').textContent = 'Network error. Please try again.';
+                console.error('Load case error:', error);
+            }
+
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function displayCase(caseData) {
+            document.getElementById('procedureType').textContent = caseData.ProcedureType || '-';
+            document.getElementById('procedureName').textContent = caseData.ProcedureName || '-';
+            document.getElementById('datePerformed').textContent = caseData.DatePerformed
+                ? new Date(caseData.DatePerformed).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+                : '-';
+            document.getElementById('durationMinutes').textContent = caseData.DurationMinutes
+                ? caseData.DurationMinutes + ' minutes'
+                : '-';
+            document.getElementById('patientAge').textContent = caseData.PatientAge || '-';
+            document.getElementById('patientSex').textContent = caseData.PatientSex || '-';
+            document.getElementById('asaGrade').textContent = caseData.ASAGrade
+                ? 'ASA ' + caseData.ASAGrade
+                : '-';
+
+            const outcomeSpan = document.getElementById('outcome');
+            outcomeSpan.textContent = caseData.Outcome || 'Not specified';
+            if (caseData.Outcome) {
+                outcomeSpan.className = `outcome-badge outcome-${caseData.Outcome}`;
+            }
+
+            document.getElementById('complications').textContent = caseData.Complications || 'None';
+            document.getElementById('notes').textContent = caseData.Notes || 'No notes';
+
+            document.getElementById('createdAt').textContent = caseData.CreatedAt
+                ? new Date(caseData.CreatedAt).toLocaleString('en-GB')
+                : '-';
+            document.getElementById('updatedAt').textContent = caseData.UpdatedAt
+                ? new Date(caseData.UpdatedAt).toLocaleString('en-GB')
+                : '-';
+        }
+
+        function editCase() {
+            window.location.href = `/edit-case.html?id=${caseId}`;
+        }
+
+        async function deleteCase() {
+            if (!confirm('Are you sure you want to delete this case? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await appConfig.apiCall(`cases/${caseId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Case deleted successfully');
+                    window.location.href = '/cases.html';
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to delete case');
+                }
+            } catch (error) {
+                alert('Network error. Please try again.');
+                console.error('Delete case error:', error);
+            }
+        }
+
+        loadCase();
+    </script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Case - Surgical Outcomes Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <h1>Surgical Outcomes Tracker</h1>
+            <div class="nav-links">
+                <a href="dashboard.html">Dashboard</a>
+                <a href="cases.html">Cases</a>
+                <a href="analytics.html">Analytics</a>
+                <a href="query.html">Custom Query</a>
+                <span id="userGreeting"></span>
+                <a href="#" onclick="appConfig.logout()">Logout</a>
+            </div>
+        </nav>
+
+        <main>
+            <h2>Edit Case</h2>
+
+            <div id="loading" class="loading">Loading case...</div>
+            <div id="error" class="error"></div>
+
+            <form id="editCaseForm" class="case-form" style="display: none;">
+                <div class="form-section">
+                    <h3>Procedure Information</h3>
+
+                    <div class="form-group">
+                        <label for="procedureType">Procedure Type *</label>
+                        <select id="procedureType" name="procedureType" required>
+                            <option value="">Select procedure type</option>
+                            <option value="Open">Open</option>
+                            <option value="Laparoscopic">Laparoscopic</option>
+                            <option value="Robotic">Robotic</option>
+                            <option value="Endoscopic">Endoscopic</option>
+                            <option value="Percutaneous">Percutaneous</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="procedureName">Procedure Name *</label>
+                        <input type="text" id="procedureName" name="procedureName" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="datePerformed">Date Performed *</label>
+                        <input type="date" id="datePerformed" name="datePerformed" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="durationMinutes">Duration (minutes)</label>
+                        <input type="number" id="durationMinutes" name="durationMinutes" min="0">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Patient Demographics</h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="patientAge">Age</label>
+                            <input type="number" id="patientAge" name="patientAge" min="0" max="120">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="patientSex">Sex</label>
+                            <select id="patientSex" name="patientSex">
+                                <option value="">Select</option>
+                                <option value="M">Male</option>
+                                <option value="F">Female</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="asaGrade">ASA Grade</label>
+                            <select id="asaGrade" name="asaGrade">
+                                <option value="">Select</option>
+                                <option value="1">ASA I</option>
+                                <option value="2">ASA II</option>
+                                <option value="3">ASA III</option>
+                                <option value="4">ASA IV</option>
+                                <option value="5">ASA V</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Outcomes</h3>
+
+                    <div class="form-group">
+                        <label for="outcome">Overall Outcome</label>
+                        <select id="outcome" name="outcome">
+                            <option value="">Select</option>
+                            <option value="positive">Positive</option>
+                            <option value="neutral">Neutral</option>
+                            <option value="negative">Negative</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="complications">Complications</label>
+                        <input type="text" id="complications" name="complications">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h3>Additional Notes</h3>
+
+                    <div class="form-group">
+                        <label for="notes">Clinical Notes</label>
+                        <textarea id="notes" name="notes" rows="5"></textarea>
+                    </div>
+                </div>
+
+                <div id="formError" class="error"></div>
+                <div id="success" class="success"></div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Update Case</button>
+                    <a href="cases.html" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        if (!appConfig.isAuthenticated()) {
+            window.location.href = '/login.html';
+        }
+
+        const user = appConfig.getCurrentUser();
+        if (user) {
+            document.getElementById('userGreeting').textContent = `Hello, ${user.name}`;
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const caseId = urlParams.get('id');
+
+        if (!caseId) {
+            window.location.href = '/cases.html';
+        }
+
+        // Load case data
+        async function loadCase() {
+            try {
+                const response = await appConfig.apiCall(`cases/${caseId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    populateForm(data.case);
+                    document.getElementById('editCaseForm').style.display = 'block';
+                } else {
+                    document.getElementById('error').textContent = data.error || 'Failed to load case';
+                }
+            } catch (error) {
+                document.getElementById('error').textContent = 'Network error. Please try again.';
+                console.error('Load case error:', error);
+            }
+
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function populateForm(caseData) {
+            document.getElementById('procedureType').value = caseData.ProcedureType || '';
+            document.getElementById('procedureName').value = caseData.ProcedureName || '';
+            document.getElementById('datePerformed').value = caseData.DatePerformed ? caseData.DatePerformed.split('T')[0] : '';
+            document.getElementById('durationMinutes').value = caseData.DurationMinutes || '';
+            document.getElementById('patientAge').value = caseData.PatientAge || '';
+            document.getElementById('patientSex').value = caseData.PatientSex || '';
+            document.getElementById('asaGrade').value = caseData.ASAGrade || '';
+            document.getElementById('outcome').value = caseData.Outcome || '';
+            document.getElementById('complications').value = caseData.Complications || '';
+            document.getElementById('notes').value = caseData.Notes || '';
+        }
+
+        document.getElementById('editCaseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const errorDiv = document.getElementById('formError');
+            const successDiv = document.getElementById('success');
+            errorDiv.textContent = '';
+            successDiv.textContent = '';
+
+            const formData = {
+                procedureType: document.getElementById('procedureType').value,
+                procedureName: document.getElementById('procedureName').value,
+                datePerformed: document.getElementById('datePerformed').value,
+                durationMinutes: document.getElementById('durationMinutes').value || null,
+                patientAge: document.getElementById('patientAge').value || null,
+                patientSex: document.getElementById('patientSex').value || null,
+                asaGrade: document.getElementById('asaGrade').value || null,
+                outcome: document.getElementById('outcome').value || null,
+                complications: document.getElementById('complications').value || null,
+                notes: document.getElementById('notes').value || null
+            };
+
+            try {
+                const response = await appConfig.apiCall(`cases/${caseId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    successDiv.textContent = 'Case updated successfully!';
+                    setTimeout(() => {
+                        window.location.href = '/cases.html';
+                    }, 1000);
+                } else {
+                    errorDiv.textContent = data.error || 'Failed to update case';
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Network error. Please try again.';
+                console.error('Update case error:', error);
+            }
+        });
+
+        loadCase();
+    </script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cases - Surgical Outcomes Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <h1>Surgical Outcomes Tracker</h1>
+            <div class="nav-links">
+                <a href="dashboard.html">Dashboard</a>
+                <a href="cases.html" class="active">Cases</a>
+                <a href="analytics.html">Analytics</a>
+                <a href="query.html">Custom Query</a>
+                <span id="userGreeting"></span>
+                <a href="#" onclick="appConfig.logout()">Logout</a>
+            </div>
+        </nav>
+
+        <main>
+            <div class="page-header">
+                <h2>All Cases</h2>
+                <a href="add-case.html" class="btn btn-primary">Add New Case</a>
+            </div>
+
+            <div class="filters">
+                <input type="text" id="searchInput" placeholder="Search cases..." class="search-input">
+                <select id="filterProcedureType" class="filter-select">
+                    <option value="">All Procedure Types</option>
+                    <option value="Open">Open</option>
+                    <option value="Laparoscopic">Laparoscopic</option>
+                    <option value="Robotic">Robotic</option>
+                    <option value="Endoscopic">Endoscopic</option>
+                    <option value="Percutaneous">Percutaneous</option>
+                    <option value="Other">Other</option>
+                </select>
+                <select id="filterOutcome" class="filter-select">
+                    <option value="">All Outcomes</option>
+                    <option value="positive">Positive</option>
+                    <option value="neutral">Neutral</option>
+                    <option value="negative">Negative</option>
+                </select>
+            </div>
+
+            <div id="loading" class="loading">Loading cases...</div>
+            <div id="error" class="error"></div>
+
+            <div id="casesContainer" style="display: none;">
+                <div class="cases-summary">
+                    <p>Showing <strong id="casesCount">0</strong> cases</p>
+                </div>
+
+                <div class="cases-table-wrapper">
+                    <table class="cases-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Procedure</th>
+                                <th>Type</th>
+                                <th>Duration</th>
+                                <th>Age</th>
+                                <th>ASA</th>
+                                <th>Outcome</th>
+                                <th>Complications</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="casesTableBody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="emptyState" style="display: none; text-align: center; padding: 40px;">
+                    <p>No cases found. <a href="add-case.html">Add your first case</a></p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        // Check authentication
+        if (!appConfig.isAuthenticated()) {
+            window.location.href = '/login.html';
+        }
+
+        // Display user greeting
+        const user = appConfig.getCurrentUser();
+        if (user) {
+            document.getElementById('userGreeting').textContent = `Hello, ${user.name}`;
+        }
+
+        let allCases = [];
+
+        // Load cases
+        async function loadCases() {
+            try {
+                const response = await appConfig.apiCall('cases?limit=1000');
+                const data = await response.json();
+
+                if (response.ok) {
+                    allCases = data.cases;
+                    displayCases(allCases);
+                    document.getElementById('casesContainer').style.display = 'block';
+                } else {
+                    document.getElementById('error').textContent = data.error || 'Failed to load cases';
+                }
+            } catch (error) {
+                document.getElementById('error').textContent = 'Network error. Please try again.';
+                console.error('Load cases error:', error);
+            }
+
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Display cases in table
+        function displayCases(cases) {
+            const tbody = document.getElementById('casesTableBody');
+            document.getElementById('casesCount').textContent = cases.length;
+
+            if (cases.length === 0) {
+                document.getElementById('emptyState').style.display = 'block';
+                tbody.innerHTML = '';
+                return;
+            }
+
+            document.getElementById('emptyState').style.display = 'none';
+
+            tbody.innerHTML = cases.map(c => `
+                <tr>
+                    <td>${formatDate(c.DatePerformed)}</td>
+                    <td><strong>${c.ProcedureName}</strong></td>
+                    <td>${c.ProcedureType}</td>
+                    <td>${c.DurationMinutes ? c.DurationMinutes + ' min' : '-'}</td>
+                    <td>${c.PatientAge || '-'}</td>
+                    <td>${c.ASAGrade ? 'ASA ' + c.ASAGrade : '-'}</td>
+                    <td><span class="outcome-badge outcome-${c.Outcome || 'neutral'}">${c.Outcome || 'N/A'}</span></td>
+                    <td>${c.Complications || '-'}</td>
+                    <td class="actions-cell">
+                        <button onclick="viewCase('${c.CaseId}')" class="btn-icon" title="View">👁️</button>
+                        <button onclick="editCase('${c.CaseId}')" class="btn-icon" title="Edit">✏️</button>
+                        <button onclick="deleteCase('${c.CaseId}')" class="btn-icon btn-danger" title="Delete">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+        }
+
+        // Filter cases
+        function filterCases() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const procedureType = document.getElementById('filterProcedureType').value;
+            const outcome = document.getElementById('filterOutcome').value;
+
+            const filtered = allCases.filter(c => {
+                const matchesSearch = !searchTerm ||
+                    c.ProcedureName.toLowerCase().includes(searchTerm) ||
+                    (c.Notes && c.Notes.toLowerCase().includes(searchTerm));
+
+                const matchesProcedureType = !procedureType || c.ProcedureType === procedureType;
+                const matchesOutcome = !outcome || c.Outcome === outcome;
+
+                return matchesSearch && matchesProcedureType && matchesOutcome;
+            });
+
+            displayCases(filtered);
+        }
+
+        // Event listeners for filters
+        document.getElementById('searchInput').addEventListener('input', filterCases);
+        document.getElementById('filterProcedureType').addEventListener('change', filterCases);
+        document.getElementById('filterOutcome').addEventListener('change', filterCases);
+
+        // View case
+        function viewCase(caseId) {
+            window.location.href = `/view-case.html?id=${caseId}`;
+        }
+
+        // Edit case
+        function editCase(caseId) {
+            window.location.href = `/edit-case.html?id=${caseId}`;
+        }
+
+        // Delete case
+        async function deleteCase(caseId) {
+            if (!confirm('Are you sure you want to delete this case? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await appConfig.apiCall(`cases/${caseId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    // Remove from array and refresh display
+                    allCases = allCases.filter(c => c.CaseId !== caseId);
+                    filterCases();
+                } else {
+                    const data = await response.json();
+                    alert(data.error || 'Failed to delete case');
+                }
+            } catch (error) {
+                alert('Network error. Please try again.');
+                console.error('Delete case error:', error);
+            }
+        }
+
+        // Load cases on page load
+        loadCases();
+    </script>
+</body>
+</html>

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - Surgical Outcomes Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <h1>Surgical Outcomes Tracker</h1>
+            <div class="nav-links">
+                <a href="dashboard.html">Dashboard</a>
+                <a href="cases.html">Cases</a>
+                <a href="analytics.html" class="active">Analytics</a>
+                <a href="query.html">Custom Query</a>
+                <span id="userGreeting"></span>
+                <a href="#" onclick="appConfig.logout()">Logout</a>
+            </div>
+        </nav>
+
+        <main>
+            <h2>Analytics & Insights</h2>
+
+            <div class="filters" style="margin-bottom: 30px;">
+                <div class="form-group">
+                    <label>Start Date</label>
+                    <input type="date" id="startDate" class="filter-select">
+                </div>
+                <div class="form-group">
+                    <label>End Date</label>
+                    <input type="date" id="endDate" class="filter-select">
+                </div>
+                <div class="form-group">
+                    <label>Procedure Type</label>
+                    <select id="filterProcedureType" class="filter-select">
+                        <option value="">All Types</option>
+                        <option value="Open">Open</option>
+                        <option value="Laparoscopic">Laparoscopic</option>
+                        <option value="Robotic">Robotic</option>
+                        <option value="Endoscopic">Endoscopic</option>
+                        <option value="Percutaneous">Percutaneous</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <button onclick="loadAnalytics()" class="btn btn-primary">Apply Filters</button>
+            </div>
+
+            <div id="loading" class="loading">Loading analytics...</div>
+            <div id="error" class="error"></div>
+
+            <div id="analyticsContainer" style="display: none;">
+                <!-- Summary Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Cases</h3>
+                        <p class="stat-value" id="totalCases">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Positive Outcomes</h3>
+                        <p class="stat-value" id="positiveOutcomes">0</p>
+                        <small id="positiveRate"></small>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Complication-Free</h3>
+                        <p class="stat-value" id="complicationFree">0</p>
+                        <small id="complicationFreeRate"></small>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Avg Duration</h3>
+                        <p class="stat-value" id="avgDuration">0 min</p>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="chart-grid">
+                    <div class="chart-container">
+                        <h3>Outcomes Distribution</h3>
+                        <canvas id="outcomesChart"></canvas>
+                    </div>
+
+                    <div class="chart-container">
+                        <h3>Procedure Types</h3>
+                        <canvas id="procedureTypesChart"></canvas>
+                    </div>
+
+                    <div class="chart-container">
+                        <h3>Cases Over Time</h3>
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+
+                    <div class="chart-container">
+                        <h3>Complications by Procedure Type</h3>
+                        <canvas id="complicationsChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Detailed Breakdown -->
+                <div class="chart-container" style="margin-top: 30px;">
+                    <h3>Procedure Breakdown</h3>
+                    <div id="procedureBreakdown"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        // Check authentication
+        if (!appConfig.isAuthenticated()) {
+            window.location.href = '/login.html';
+        }
+
+        const user = appConfig.getCurrentUser();
+        if (user) {
+            document.getElementById('userGreeting').textContent = `Hello, ${user.name}`;
+        }
+
+        let charts = {};
+
+        // Set default date range (last 12 months)
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setMonth(startDate.getMonth() - 12);
+        document.getElementById('endDate').value = endDate.toISOString().split('T')[0];
+        document.getElementById('startDate').value = startDate.toISOString().split('T')[0];
+
+        async function loadAnalytics() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').textContent = '';
+
+            try {
+                // Build query params
+                const params = new URLSearchParams();
+                const startDateVal = document.getElementById('startDate').value;
+                const endDateVal = document.getElementById('endDate').value;
+                const procedureType = document.getElementById('filterProcedureType').value;
+
+                if (startDateVal) params.append('startDate', startDateVal);
+                if (endDateVal) params.append('endDate', endDateVal);
+                if (procedureType) params.append('procedureType', procedureType);
+
+                // Load statistics and all cases
+                const [statsResponse, casesResponse] = await Promise.all([
+                    appConfig.apiCall(`statistics?${params.toString()}`),
+                    appConfig.apiCall('cases?limit=1000')
+                ]);
+
+                const statsData = await statsResponse.json();
+                const casesData = await casesResponse.json();
+
+                if (statsResponse.ok && casesResponse.ok) {
+                    displayStats(statsData.statistics);
+
+                    // Filter cases based on selected filters
+                    let filteredCases = casesData.cases;
+                    if (startDateVal) {
+                        filteredCases = filteredCases.filter(c => new Date(c.DatePerformed) >= new Date(startDateVal));
+                    }
+                    if (endDateVal) {
+                        filteredCases = filteredCases.filter(c => new Date(c.DatePerformed) <= new Date(endDateVal));
+                    }
+                    if (procedureType) {
+                        filteredCases = filteredCases.filter(c => c.ProcedureType === procedureType);
+                    }
+
+                    createCharts(filteredCases);
+                    createProcedureBreakdown(filteredCases);
+
+                    document.getElementById('analyticsContainer').style.display = 'block';
+                } else {
+                    document.getElementById('error').textContent = 'Failed to load analytics';
+                }
+            } catch (error) {
+                document.getElementById('error').textContent = 'Network error. Please try again.';
+                console.error('Analytics error:', error);
+            }
+
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function displayStats(stats) {
+            const total = stats.TotalCases || 0;
+            const positive = stats.PositiveOutcomes || 0;
+            const complicationFree = stats.CasesWithoutComplications || 0;
+
+            document.getElementById('totalCases').textContent = total;
+            document.getElementById('positiveOutcomes').textContent = positive;
+            document.getElementById('complicationFree').textContent = complicationFree;
+            document.getElementById('avgDuration').textContent = stats.AvgDuration
+                ? Math.round(stats.AvgDuration) + ' min'
+                : '0 min';
+
+            if (total > 0) {
+                document.getElementById('positiveRate').textContent = `${Math.round(positive / total * 100)}% of cases`;
+                document.getElementById('complicationFreeRate').textContent = `${Math.round(complicationFree / total * 100)}% of cases`;
+            }
+        }
+
+        function createCharts(cases) {
+            // Destroy existing charts
+            Object.values(charts).forEach(chart => chart && chart.destroy());
+
+            // Outcomes chart
+            const outcomeCounts = {
+                positive: cases.filter(c => c.Outcome === 'positive').length,
+                neutral: cases.filter(c => c.Outcome === 'neutral').length,
+                negative: cases.filter(c => c.Outcome === 'negative').length,
+                unknown: cases.filter(c => !c.Outcome).length
+            };
+
+            charts.outcomes = new Chart(document.getElementById('outcomesChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positive', 'Neutral', 'Negative', 'Unknown'],
+                    datasets: [{
+                        data: [outcomeCounts.positive, outcomeCounts.neutral, outcomeCounts.negative, outcomeCounts.unknown],
+                        backgroundColor: ['#27ae60', '#95a5a6', '#e74c3c', '#ecf0f1']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true
+                }
+            });
+
+            // Procedure types chart
+            const procedureTypes = {};
+            cases.forEach(c => {
+                procedureTypes[c.ProcedureType] = (procedureTypes[c.ProcedureType] || 0) + 1;
+            });
+
+            charts.procedureTypes = new Chart(document.getElementById('procedureTypesChart'), {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(procedureTypes),
+                    datasets: [{
+                        label: 'Number of Cases',
+                        data: Object.values(procedureTypes),
+                        backgroundColor: '#3498db'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Timeline chart
+            const casesByMonth = {};
+            cases.forEach(c => {
+                const date = new Date(c.DatePerformed);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                casesByMonth[monthKey] = (casesByMonth[monthKey] || 0) + 1;
+            });
+
+            const sortedMonths = Object.keys(casesByMonth).sort();
+
+            charts.timeline = new Chart(document.getElementById('timelineChart'), {
+                type: 'line',
+                data: {
+                    labels: sortedMonths.map(m => {
+                        const [year, month] = m.split('-');
+                        return new Date(year, month - 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+                    }),
+                    datasets: [{
+                        label: 'Cases per Month',
+                        data: sortedMonths.map(m => casesByMonth[m]),
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Complications by procedure type
+            const complicationsByType = {};
+            cases.forEach(c => {
+                if (!complicationsByType[c.ProcedureType]) {
+                    complicationsByType[c.ProcedureType] = { total: 0, withComplications: 0 };
+                }
+                complicationsByType[c.ProcedureType].total++;
+                if (c.Complications && c.Complications.toLowerCase() !== 'none') {
+                    complicationsByType[c.ProcedureType].withComplications++;
+                }
+            });
+
+            const types = Object.keys(complicationsByType);
+            const complicationRates = types.map(t => {
+                const data = complicationsByType[t];
+                return data.total > 0 ? (data.withComplications / data.total * 100) : 0;
+            });
+
+            charts.complications = new Chart(document.getElementById('complicationsChart'), {
+                type: 'bar',
+                data: {
+                    labels: types,
+                    datasets: [{
+                        label: 'Complication Rate (%)',
+                        data: complicationRates,
+                        backgroundColor: '#e74c3c'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createProcedureBreakdown(cases) {
+            const breakdown = {};
+            cases.forEach(c => {
+                const key = c.ProcedureName;
+                if (!breakdown[key]) {
+                    breakdown[key] = {
+                        count: 0,
+                        positive: 0,
+                        negative: 0,
+                        complications: 0,
+                        totalDuration: 0
+                    };
+                }
+                breakdown[key].count++;
+                if (c.Outcome === 'positive') breakdown[key].positive++;
+                if (c.Outcome === 'negative') breakdown[key].negative++;
+                if (c.Complications && c.Complications.toLowerCase() !== 'none') breakdown[key].complications++;
+                if (c.DurationMinutes) breakdown[key].totalDuration += c.DurationMinutes;
+            });
+
+            const html = `
+                <table class="cases-table">
+                    <thead>
+                        <tr>
+                            <th>Procedure</th>
+                            <th>Count</th>
+                            <th>Success Rate</th>
+                            <th>Complication Rate</th>
+                            <th>Avg Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${Object.entries(breakdown).map(([name, data]) => `
+                            <tr>
+                                <td><strong>${name}</strong></td>
+                                <td>${data.count}</td>
+                                <td>${data.count > 0 ? Math.round(data.positive / data.count * 100) : 0}%</td>
+                                <td>${data.count > 0 ? Math.round(data.complications / data.count * 100) : 0}%</td>
+                                <td>${data.count > 0 ? Math.round(data.totalDuration / data.count) : 0} min</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            document.getElementById('procedureBreakdown').innerHTML = html;
+        }
+
+        // Load analytics on page load
+        loadAnalytics();
+    </script>
+</body>
+</html>
