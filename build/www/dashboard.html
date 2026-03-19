@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Surgical Outcomes Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <h1>Surgical Outcomes Tracker</h1>
+            <div class="nav-links">
+                <a href="dashboard.html" class="active">Dashboard</a>
+                <a href="cases.html">Cases</a>
+                <a href="analytics.html">Analytics</a>
+                <a href="query.html">Custom Query</a>
+                <span id="userGreeting"></span>
+                <a href="#" onclick="appConfig.logout()">Logout</a>
+            </div>
+        </nav>
+
+        <main>
+            <h2>Dashboard</h2>
+
+            <div id="loading" class="loading">Loading...</div>
+            <div id="error" class="error"></div>
+
+            <div id="statsContainer" class="stats-grid" style="display: none;">
+                <div class="stat-card">
+                    <h3>Total Cases</h3>
+                    <p class="stat-value" id="totalCases">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Positive Outcomes</h3>
+                    <p class="stat-value" id="positiveOutcomes">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Cases Without Complications</h3>
+                    <p class="stat-value" id="casesWithoutComplications">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Average Duration</h3>
+                    <p class="stat-value" id="avgDuration">0 min</p>
+                </div>
+            </div>
+
+            <div class="actions">
+                <a href="add-case.html" class="btn btn-primary">Add New Case</a>
+                <a href="cases.html" class="btn btn-secondary">View All Cases</a>
+            </div>
+
+            <div id="recentCases">
+                <h3>Recent Cases</h3>
+                <div id="casesList"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        // Check authentication
+        if (!appConfig.isAuthenticated()) {
+            window.location.href = '/login.html';
+        }
+
+        // Display user greeting
+        const user = appConfig.getCurrentUser();
+        if (user) {
+            document.getElementById('userGreeting').textContent = `Hello, ${user.name}`;
+        }
+
+        // Load statistics
+        async function loadStats() {
+            try {
+                const response = await appConfig.apiCall('statistics');
+                const data = await response.json();
+
+                if (response.ok) {
+                    const stats = data.statistics;
+                    document.getElementById('totalCases').textContent = stats.TotalCases || 0;
+                    document.getElementById('positiveOutcomes').textContent = stats.PositiveOutcomes || 0;
+                    document.getElementById('casesWithoutComplications').textContent = stats.CasesWithoutComplications || 0;
+                    document.getElementById('avgDuration').textContent = stats.AvgDuration
+                        ? Math.round(stats.AvgDuration) + ' min'
+                        : '0 min';
+
+                    document.getElementById('statsContainer').style.display = 'grid';
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Load recent cases
+        async function loadRecentCases() {
+            try {
+                const response = await appConfig.apiCall('cases?limit=5');
+                const data = await response.json();
+
+                if (response.ok) {
+                    const casesList = document.getElementById('casesList');
+
+                    if (data.cases.length === 0) {
+                        casesList.innerHTML = '<p>No cases yet. <a href="add-case.html">Add your first case</a></p>';
+                    } else {
+                        casesList.innerHTML = data.cases.map(c => `
+                            <div class="case-item">
+                                <strong>${c.ProcedureName}</strong>
+                                <span>${new Date(c.DatePerformed).toLocaleDateString()}</span>
+                                <span class="outcome-${c.Outcome}">${c.Outcome || 'N/A'}</span>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading cases:', error);
+            }
+
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // Load data
+        loadStats();
+        loadRecentCases();
+    </script>
+</body>
+</html>

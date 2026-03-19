@@ -1,0 +1,20 @@
+{
+  "name": "surgical-outcomes-tracker",
+  "version": "1.0.0",
+  "description": "Platform for consultants to log theatre cases and track outcomes",
+  "scripts": {
+    "start": "npm run start:frontend & npm run start:api",
+    "start:frontend": "cd build/www && python3 -m http.server 5001",
+    "start:api": "cd api-python && func start",
+    "deploy:frontend": "cd build && swa deploy",
+    "deploy:api": "cd api-python && func azure functionapp publish surgical-outcomes-api --python"
+  },
+  "keywords": [
+    "surgical",
+    "outcomes",
+    "healthcare",
+    "azure"
+  ],
+  "author": "",
+  "license": "MIT"
+}

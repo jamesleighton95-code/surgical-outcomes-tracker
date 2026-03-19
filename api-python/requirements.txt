@@ -1,0 +1,13 @@
+azure-functions
+azure-data-tables
+azure-storage-blob
+PyJWT
+bcrypt
+openai
+python-dotenv
+pymssql
+openpyxl
+python-multipart
+numpy
+pandas
+scipy

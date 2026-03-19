@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - Surgical Outcomes Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sign Up</h1>
+        </header>
+
+        <main>
+            <form id="signupForm" class="auth-form">
+                <div class="form-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="specialty">Specialty</label>
+                    <input type="text" id="specialty" name="specialty" placeholder="e.g., General Surgery">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required minlength="8">
+                </div>
+
+                <div class="form-group">
+                    <label for="confirmPassword">Confirm Password</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" required minlength="8">
+                </div>
+
+                <div id="error" class="error"></div>
+
+                <button type="submit" class="btn btn-primary">Sign Up</button>
+            </form>
+
+            <p class="auth-link">
+                Already have an account? <a href="login.html">Login</a>
+            </p>
+        </main>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        document.getElementById('signupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const specialty = document.getElementById('specialty').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const errorDiv = document.getElementById('error');
+
+            errorDiv.textContent = '';
+
+            // Validate password match
+            if (password !== confirmPassword) {
+                errorDiv.textContent = 'Passwords do not match';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${appConfig.apiUrl}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name, email, specialty, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Save token and user info
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+
+                    // Redirect to dashboard
+                    window.location.href = '/dashboard.html';
+                } else {
+                    errorDiv.textContent = data.error || 'Registration failed';
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Network error. Please try again.';
+                console.error('Signup error:', error);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surgical Outcomes Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Surgical Outcomes Tracker</h1>
+            <p class="tagline">Track, analyze, and improve your surgical outcomes</p>
+        </header>
+
+        <main>
+            <section class="hero">
+                <h2>Professional Case Management for Consultants</h2>
+                <p>Log theatre cases, track outcomes, and gain insights into your surgical practice.</p>
+
+                <div class="features">
+                    <div class="feature">
+                        <h3>Secure Logging</h3>
+                        <p>Record cases without patient identifiable information</p>
+                    </div>
+                    <div class="feature">
+                        <h3>Analytics</h3>
+                        <p>Comprehensive statistics and outcome analysis</p>
+                    </div>
+                    <div class="feature">
+                        <h3>Custom Queries</h3>
+                        <p>Ask questions about your data in plain English</p>
+                    </div>
+                    <div class="feature">
+                        <h3>Hosted on Azure</h3>
+                        <p>Secure, HIPAA-compliant cloud infrastructure</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cta">
+                <a href="login.html" class="btn btn-primary">Login</a>
+                <a href="signup.html" class="btn btn-secondary">Sign Up</a>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 Surgical Outcomes Tracker. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        // Redirect to dashboard if already logged in
+        if (appConfig.isAuthenticated()) {
+            window.location.href = '/dashboard.html';
+        }
+    </script>
+</body>
+</html>
